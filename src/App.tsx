@@ -90,6 +90,13 @@ function AppContent() {
   const [isPropertyDeleteModalOpen, setIsPropertyDeleteModalOpen] = useState(false);
   const [propertyToDelete, setPropertyToDelete] = useState<Property | null>(null);
 
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authInfo, setAuthInfo] = useState<string | null>(null);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setUser(data.session?.user ?? null);
@@ -162,14 +169,39 @@ function AppContent() {
     };
   }, [user, propertiesLimit, billingsLimit, selectedPropertyForHistory, activeTab]);
 
-  const handleLogin = async () => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthInfo(null);
+    setAuthLoading(true);
     try {
-      await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo: window.location.origin },
-      });
-    } catch (error) {
-      console.error('Login failed:', error);
+      const email = authEmail.trim();
+      const password = authPassword;
+      if (!email || !password) {
+        setAuthError('Informe e-mail e senha.');
+        return;
+      }
+      if (password.length < 6) {
+        setAuthError('A senha precisa ter pelo menos 6 caracteres.');
+        return;
+      }
+
+      if (authMode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) throw error;
+        if (!data.session) {
+          setAuthInfo('Conta criada. Se pedir confirmação de e-mail, confira a caixa de entrada e depois faça login.');
+          setAuthMode('login');
+        }
+      }
+    } catch (error: any) {
+      console.error('Auth failed:', error);
+      setAuthError(error?.message || 'Falha na autenticação.');
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -682,20 +714,80 @@ function AppContent() {
             <LayoutDashboard className="text-white" size={32} />
           </div>
           <h1 className="text-3xl font-black text-slate-900 mb-2 tracking-tight">Gestão Billing</h1>
-          <p className="text-slate-400 text-sm mb-8 font-medium leading-relaxed">Gerencie as leituras e o fluxo de cobrança de seus imóveis residenciais de forma profissional e enxuta.</p>
+          <p className="text-slate-400 text-sm mb-6 font-medium leading-relaxed">Entre com e-mail e senha para gerenciar cobranças, imóveis e WhatsApp.</p>
+
+          <form onSubmit={handleAuthSubmit} className="text-left space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">E-mail</label>
+              <input
+                type="email"
+                autoComplete="email"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm font-semibold"
+                placeholder="seu@email.com"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-500 mb-1.5">Senha</label>
+              <input
+                type="password"
+                autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none text-sm font-semibold"
+                placeholder="Mínimo 6 caracteres"
+                required
+                minLength={6}
+              />
+            </div>
+
+            {authError && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2 font-medium">
+                {authError}
+              </div>
+            )}
+            {authInfo && (
+              <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2 font-medium">
+                {authInfo}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={authLoading}
+              className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg active:scale-95 duration-200 cursor-pointer disabled:opacity-60"
+            >
+              <LogIn size={20} />
+              {authLoading
+                ? 'Aguarde...'
+                : authMode === 'login'
+                  ? 'Entrar'
+                  : 'Criar conta'}
+            </button>
+          </form>
+
           <button
-            onClick={handleLogin}
-            className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-3 shadow-md hover:shadow-lg hover:shadow-slate-100 active:scale-95 duration-200 cursor-pointer"
+            type="button"
+            onClick={() => {
+              setAuthMode(authMode === 'login' ? 'signup' : 'login');
+              setAuthError(null);
+              setAuthInfo(null);
+            }}
+            className="mt-5 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors cursor-pointer"
           >
-            <LogIn size={20} />
-            Entrar com Google
+            {authMode === 'login'
+              ? 'Não tem conta? Criar conta'
+              : 'Já tem conta? Entrar'}
           </button>
         </motion.div>
       </div>
     );
   }
 
-  const isAdmin = user.email?.toLowerCase() === 'temporadaitapema2@gmail.com';
+  // Sistema interno: qualquer usuário autenticado tem acesso completo
+  const isAdmin = !!user;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 antialiased selection:bg-blue-500/10 selection:text-blue-600">
