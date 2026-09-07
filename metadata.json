@@ -1,0 +1,8 @@
+{
+  "name": "Remix COBRANÇAS MENSAL E ANUAL PRINCIPAL",
+  "description": "Sistema para controle de cobrança de aluguéis, água e luz com régua de notificações de cobrança via WhatsApp (UAZAPI).",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidCondominium(data) {
+      return (!('name' in data) || data.name is string) &&
+             (!('address' in data) || data.address is string) &&
+             (!('syndicName' in data) || data.syndicName is string) &&
+             (!('syndicPhone' in data) || data.syndicPhone is string) &&
+             (!('notes' in data) || data.notes is string) &&
+             (!('updatedAt' in data) || data.updatedAt == null || data.updatedAt is timestamp || data.updatedAt is string) &&
+             (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp || data.createdAt is string);
+    }
+
+    function isValidProperty(data) {
+      return (!('propertyCode' in data) || data.propertyCode is string) &&
+             (!('ownerName' in data) || data.ownerName is string) &&
+             (!('condominium' in data) || data.condominium is string) &&
+             (!('tenantCpf' in data) || data.tenantCpf is string) &&
+             (!('tenantEmail' in data) || data.tenantEmail is string) &&
+             (!('tenantAddress' in data) || data.tenantAddress is string) &&
+             (!('referencePhone' in data) || data.referencePhone is string) &&
+             (!('referenceAddress' in data) || data.referenceAddress is string) &&
+             (!('documents' in data) || data.documents is list) &&
+             (!('additionalInfo' in data) || data.additionalInfo is list) &&
+             (!('phone' in data) || data.phone is string) &&
+             (!('phones' in data) || data.phones is list) &&
+             (!('rentAmount' in data) || data.rentAmount == null || data.rentAmount is number || data.rentAmount is int) &&
+             (!('leaseStartDate' in data) || data.leaseStartDate == null || data.leaseStartDate is timestamp || data.leaseStartDate is string) &&
+             (!('initialWaterReading' in data) || data.initialWaterReading == null || data.initialWaterReading is number || data.initialWaterReading is int) &&
+             (!('initialElectricityReading' in data) || data.initialElectricityReading == null || data.initialElectricityReading is number || data.initialElectricityReading is int) &&
+             (!('securityDepositAmount' in data) || data.securityDepositAmount == null || data.securityDepositAmount is number || data.securityDepositAmount is int) &&
+             (!('securityDepositPaid' in data) || data.securityDepositPaid == null || data.securityDepositPaid is bool) &&
+             (!('isClean' in data) || data.isClean == null || data.isClean is bool) &&
+             (!('hasUtensils' in data) || data.hasUtensils == null || data.hasUtensils is bool) &&
+             (!('inspectionNotes' in data) || data.inspectionNotes is string) &&
+             (!('status' in data) || data.status is string) &&
+             (!('colorTag' in data) || data.colorTag is string) &&
+             (!('cadencePaused' in data) || data.cadencePaused is bool) &&
+             (!('updatedAt' in data) || data.updatedAt == null || data.updatedAt is timestamp || data.updatedAt is string) &&
+             (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp || data.createdAt is string);
+    }
+
+    function isValidBilling(data) {
+      return (!('propertyId' in data) || data.propertyId is string) &&
+             (!('status' in data) || data.status is string) &&
+             (!('items' in data) || data.items is list) &&
+             (!('totalAmount' in data) || data.totalAmount == null || data.totalAmount is number || data.totalAmount is int) &&
+             (!('propertyCode' in data) || data.propertyCode is string) &&
+             (!('tenantName' in data) || data.tenantName is string) &&
+             (!('tenantPhone' in data) || data.tenantPhone is string) &&
+             (!('paidAmount' in data) || data.paidAmount == null || data.paidAmount is number || data.paidAmount is int) &&
+             (!('paymentHistory' in data) || data.paymentHistory is list) &&
+             (!('readingDate' in data) || data.readingDate == null || data.readingDate is timestamp || data.readingDate is string) &&
+             (!('dueDate' in data) || data.dueDate == null || data.dueDate is timestamp || data.dueDate is string) &&
+             (!('archived' in data) || data.archived == null || data.archived is bool) &&
+             (!('userRemovedBalanceItem' in data) || data.userRemovedBalanceItem == null || data.userRemovedBalanceItem is bool) &&
+             (!('notes' in data) || data.notes is string) &&
+             (!('colorTag' in data) || data.colorTag is string) &&
+             (!('updatedAt' in data) || data.updatedAt == null || data.updatedAt is timestamp || data.updatedAt is string) &&
+             (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp || data.createdAt is string);
+    }
+
+    function isValidReceipt(data) {
+      return (!('property' in data) || data.property is string) &&
+             (!('date' in data) || data.date is string) &&
+             (!('amount' in data) || data.amount == null || data.amount is number || data.amount is int) &&
+             (!('order' in data) || data.order == null || data.order is number || data.order is int) &&
+             (!('createdAt' in data) || data.createdAt == null || data.createdAt is timestamp || data.createdAt is string);
+    }
+
+    match /users/{userId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /properties/{propertyId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidProperty(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+
+    match /billings/{billingId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidBilling(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+
+    match /settings/{settingsId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /receipt_records/{receiptId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidReceipt(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+
+    match /condominiums/{condoId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidCondominium(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+
+    match /{document=**} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

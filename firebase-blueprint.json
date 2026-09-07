@@ -1,0 +1,81 @@
+{
+  "entities": {
+    "Property": {
+      "title": "Property",
+      "description": "Represents a real estate unit.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Firestore document ID" },
+        "propertyCode": { "type": "string", "description": "Property ID/Number (e.g. Apt 101)" },
+        "ownerName": { "type": "string", "description": "Name of the person responsible" },
+        "tenantCpf": { "type": "string", "description": "CPF of the tenant" },
+        "tenantEmail": { "type": "string", "description": "Email of the tenant" },
+        "phone": { "type": "string", "description": "Optional contact phone" },
+        "rentAmount": { "type": "number", "description": "Monthly rent amount" },
+        "leaseStartDate": { "type": "string", "format": "date-time", "description": "Start date of the lease" },
+        "initialWaterReading": { "type": "number", "description": "Initial water meter reading" },
+        "initialElectricityReading": { "type": "number", "description": "Initial electricity meter reading" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["propertyCode", "ownerName"]
+    },
+    "BillingRecord": {
+      "title": "Billing Record",
+      "description": "Represents a water or electricity bill for a property.",
+      "type": "object",
+      "properties": {
+        "propertyId": { "type": "string", "description": "Reference to the property ID" },
+        "type": { "type": "string", "enum": ["water", "electricity"], "description": "Type of bill" },
+        "amount": { "type": "number", "description": "The amount to be paid" },
+        "previousReading": { "type": "number", "description": "Previous meter reading" },
+        "currentReading": { "type": "number", "description": "Current meter reading" },
+        "readingDate": { "type": "string", "format": "date-time", "description": "Date of the meter reading" },
+        "dueDate": { "type": "string", "format": "date-time", "description": "Due date for payment" },
+        "status": { "type": "string", "enum": ["pending", "paid", "overdue"], "description": "Payment status" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["propertyId", "type", "amount", "readingDate", "dueDate", "status"]
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Global application settings.",
+      "type": "object",
+      "properties": {
+        "waterRate": { "type": "number", "description": "Rate per unit of water" },
+        "electricityRate": { "type": "number", "description": "Rate per unit of electricity" }
+      }
+    },
+    "ReceiptRecord": {
+      "title": "Receipt Record",
+      "description": "Represents a custom receipt record for the spreadsheet.",
+      "type": "object",
+      "properties": {
+        "property": { "type": "string", "description": "The property name or apartment identifier" },
+        "date": { "type": "string", "description": "Date of the payment" },
+        "amount": { "type": "number", "description": "The amount paid in BRL" },
+        "order": { "type": "number", "description": "Display order in the spreadsheet grid" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["property", "date", "amount", "order"]
+    }
+  },
+  "firestore": {
+    "/properties": {
+      "schema": "Property",
+      "description": "Collection of properties"
+    },
+    "/billings": {
+      "schema": "BillingRecord",
+      "description": "Collection of billing records"
+    },
+    "/settings": {
+      "schema": "Settings",
+      "description": "Global settings"
+    },
+    "/receipt_records": {
+      "schema": "ReceiptRecord",
+      "description": "Simple receipt spreadsheet records"
+    }
+  }
+}
