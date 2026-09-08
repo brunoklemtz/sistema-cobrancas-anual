@@ -12,16 +12,18 @@ import { supabase } from '../supabase';
 import { Property, OperationType, TenantPhone } from '../types';
 import { handleFirestoreError, parseDate } from '../utils/firestore';
 import { logAudit } from '../utils/auditLogger';
+import { assertPropertyAvailableForContract } from '../utils/propertyAvailability';
 import { X, Home, User, Phone, Save, Droplets, Zap, Calendar, DollarSign, Mail, IdCard, CheckCircle, AlertCircle, Building2, Plus, Trash2, MessageSquare, PauseCircle, PlayCircle, ClipboardCheck, Sparkles, Utensils } from 'lucide-react';
 import { format, isBefore } from 'date-fns';
 import CondoFormModal from './CondoFormModal';
 
 interface PropertyFormProps {
   property?: Property | null;
+  properties?: Property[];
   onClose: () => void;
 }
 
-export default function PropertyForm({ property, onClose }: PropertyFormProps) {
+export default function PropertyForm({ property, properties = [], onClose }: PropertyFormProps) {
   const [propertyCode, setPropertyCode] = useState(property?.propertyCode || '');
   const [condominium, setCondominium] = useState(property?.condominium || '');
   const [ownerName, setOwnerName] = useState(property?.ownerName || '');
@@ -75,6 +77,7 @@ export default function PropertyForm({ property, onClose }: PropertyFormProps) {
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [codeWarning, setCodeWarning] = useState<string | null>(null);
   const [condoList, setCondoList] = useState<string[]>([]);
   const [isQuickCondoModalOpen, setIsQuickCondoModalOpen] = useState(false);
 
@@ -206,6 +209,7 @@ export default function PropertyForm({ property, onClose }: PropertyFormProps) {
     setStatus(property?.status || 'active');
     setShowSuccess(false);
     setError(null);
+    setCodeWarning(null);
 
     if (property?.id) {
       fetchPreviousReadings(property.id).then(readings => {
@@ -226,6 +230,15 @@ export default function PropertyForm({ property, onClose }: PropertyFormProps) {
     }
   }, [property]);
 
+  const checkPropertyCodeAvailability = (code: string, intendedStatus: 'active' | 'inactive') => {
+    return assertPropertyAvailableForContract({
+      properties,
+      propertyCode: code,
+      currentId: property?.id,
+      intendedStatus,
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -233,6 +246,25 @@ export default function PropertyForm({ property, onClose }: PropertyFormProps) {
     const path: DocTable = 'properties';
 
     try {
+      let catalog: Property[] = properties;
+      try {
+        const fresh = await getDocs('properties');
+        if (fresh.length > 0) catalog = fresh as Property[];
+      } catch {
+        // Usa a lista já carregada na tela se a consulta extra falhar
+      }
+
+      const availability = assertPropertyAvailableForContract({
+        properties: catalog,
+        propertyCode,
+        currentId: property?.id,
+        intendedStatus: status,
+      });
+      if (!availability.ok) {
+        setError(availability.message);
+        return;
+      }
+
       const parseInput = (val: string | number) => {
         if (val === undefined || val === null || val === '') return 0;
         if (typeof val === 'number') return val;
@@ -472,10 +504,22 @@ export default function PropertyForm({ property, onClose }: PropertyFormProps) {
                       required
                       type="text"
                       value={propertyCode}
-                      onChange={(e) => setPropertyCode(e.target.value)}
+                      onChange={(e) => {
+                        setPropertyCode(e.target.value);
+                        if (codeWarning) setCodeWarning(null);
+                      }}
+                      onBlur={() => {
+                        const result = checkPropertyCodeAvailability(propertyCode, status);
+                        setCodeWarning(result.ok ? null : result.message);
+                      }}
                       placeholder="Ex: Apt 101, Casa 05"
                       className="w-full px-3 py-2 border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-xs font-semibold"
                     />
+                    {codeWarning && (
+                      <p className="mt-1.5 text-[11px] font-semibold text-amber-700 leading-snug">
+                        {codeWarning}
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -696,7 +740,11 @@ export default function PropertyForm({ property, onClose }: PropertyFormProps) {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => setStatus('active')}
+                      onClick={() => {
+                        setStatus('active');
+                        const result = checkPropertyCodeAvailability(propertyCode, 'active');
+                        setCodeWarning(result.ok ? null : result.message);
+                      }}
                       className={`py-2 rounded-xl text-xs font-extrabold border-2 transition-all cursor-pointer ${
                         status === 'active' 
                           ? 'bg-green-50 border-green-500 text-green-700 shadow-2xs' 
@@ -707,7 +755,11 @@ export default function PropertyForm({ property, onClose }: PropertyFormProps) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setStatus('inactive')}
+                      onClick={() => {
+                        setStatus('inactive');
+                        const result = checkPropertyCodeAvailability(propertyCode, 'inactive');
+                        setCodeWarning(result.ok ? null : result.message);
+                      }}
                       className={`py-2 rounded-xl text-xs font-extrabold border-2 transition-all cursor-pointer ${
                         status === 'inactive' 
                           ? 'bg-red-50 border-red-500 text-red-700 shadow-2xs' 

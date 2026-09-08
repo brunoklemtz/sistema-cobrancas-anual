@@ -24,6 +24,7 @@ export default function TenantTransferModal({ properties, billings, onClose }: T
   const [generateFirstRent, setGenerateFirstRent] = useState(true);
   const [customSourceDebt, setCustomSourceDebt] = useState<string | null>(null);
   const [customDestDebt, setCustomDestDebt] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const sourceProperty = properties.find(p => p.id === sourceId);
   const destProperty = properties.find(p => p.id === destId);
@@ -123,7 +124,13 @@ export default function TenantTransferModal({ properties, billings, onClose }: T
 
   const handleExecute = async () => {
     if (!sourceProperty || !destProperty) return;
-    
+
+    if (mode === 'move' && destProperty.status === 'active') {
+      setError('Só é possível mover o inquilino para um imóvel disponível (sem contrato ativo).');
+      return;
+    }
+
+    setError(null);
     setIsProcessing(true);
     try {
       // Buscar as últimas leituras de água e luz de cada imóvel
@@ -354,6 +361,7 @@ export default function TenantTransferModal({ properties, billings, onClose }: T
       }, 1500);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, 'properties');
+      setError('Não foi possível concluir a transferência. Tente novamente.');
     } finally {
       setIsProcessing(false);
     }
@@ -397,6 +405,11 @@ export default function TenantTransferModal({ properties, billings, onClose }: T
 
           {!success ? (
             <div className="space-y-8">
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-xl font-semibold">
+                  {error}
+                </div>
+              )}
               {/* Selector Logic */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center relative">
                 {/* Source */}
@@ -426,7 +439,15 @@ export default function TenantTransferModal({ properties, billings, onClose }: T
                 {/* Mode Switcher in middle */}
                 <div className="md:absolute md:left-1/2 md:top-[60%] md:-translate-x-1/2 md:-translate-y-1/2 z-10 flex justify-center">
                   <button 
-                    onClick={() => setMode(mode === 'move' ? 'swap' : 'move')}
+                    onClick={() => {
+                      const next = mode === 'move' ? 'swap' : 'move';
+                      setMode(next);
+                      setError(null);
+                      if (next === 'move') {
+                        const dest = properties.find(p => p.id === destId);
+                        if (dest?.status === 'active') setDestId('');
+                      }
+                    }}
                     className="p-3 bg-white border-2 border-slate-100 shadow-lg rounded-2xl hover:scale-110 active:scale-95 transition-all group"
                   >
                     {mode === 'move' ? (
@@ -446,18 +467,26 @@ export default function TenantTransferModal({ properties, billings, onClose }: T
                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-700 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all appearance-none"
                   >
                     <option value="">Selecionar...</option>
-                    {availableProperties.map(p => (
-                      <option key={p.id} value={p.id} disabled={p.id === sourceId}>
+                    {availableProperties.map(p => {
+                      const destOccupied = mode === 'move' && p.status === 'active';
+                      return (
+                      <option key={p.id} value={p.id} disabled={p.id === sourceId || destOccupied}>
                         {p.propertyCode} - {p.ownerName || '(Vazio)'}
-                        {p.status === 'inactive' ? ' [INATIVO]' : ''}
+                        {p.status === 'inactive' ? ' [INATIVO]' : destOccupied ? ' [OCUPADO]' : ''}
                       </option>
-                    ))}
+                      );
+                    })}
                   </select>
                   {destProperty && (
                     <div className="flex items-center gap-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100/50">
                       <User size={14} className="text-blue-500" />
                       <span className="text-xs font-bold text-blue-700">{destProperty.ownerName || 'Vazio'}</span>
                     </div>
+                  )}
+                  {mode === 'move' && (
+                    <p className="text-[11px] font-semibold text-slate-500 leading-snug">
+                      Destino precisa estar disponível (contrato inativo). Imóveis ocupados ficam bloqueados.
+                    </p>
                   )}
                 </div>
               </div>
@@ -629,10 +658,10 @@ export default function TenantTransferModal({ properties, billings, onClose }: T
                   Cancelar
                 </button>
                 <button
-                  disabled={!sourceId || !destId || isProcessing}
+                  disabled={!sourceId || !destId || isProcessing || (mode === 'move' && destProperty?.status === 'active')}
                   onClick={handleExecute}
                   className={`flex-[2] px-6 py-4 rounded-2xl font-black text-white shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 ${
-                    !sourceId || !destId || isProcessing
+                    !sourceId || !destId || isProcessing || (mode === 'move' && destProperty?.status === 'active')
                       ? 'bg-slate-200 cursor-not-allowed'
                       : mode === 'move' ? 'bg-blue-600 shadow-blue-200 hover:bg-blue-700' : 'bg-amber-600 shadow-amber-200 hover:bg-amber-700'
                   }`}

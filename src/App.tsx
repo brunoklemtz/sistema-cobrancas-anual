@@ -379,7 +379,7 @@ function AppContent() {
     }
   };
 
-  const handleUpdateBillingStatus = async (ids: string[], status: 'pending' | 'paid' | 'overdue') => {
+  const handleUpdateBillingStatus = async (ids: string[], status: 'pending' | 'paid' | 'overdue' | 'cancelled') => {
     try {
       const affectedPropertyIds = new Set<string>();
 
@@ -1198,6 +1198,7 @@ function AppContent() {
       {isPropertyModalOpen && (
         <PropertyForm 
           property={editingProperty} 
+          properties={properties}
           onClose={() => setIsPropertyModalOpen(false)} 
         />
       )}
