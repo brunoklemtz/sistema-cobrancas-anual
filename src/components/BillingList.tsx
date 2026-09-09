@@ -19,12 +19,21 @@ interface BillingListProps {
   onDelete: (ids: string[]) => void;
   onArchive: (ids: string[]) => void;
   onUpdateColor: (ids: string[], color: string | null) => void;
-  onUpdateStatus: (ids: string[], status: 'pending' | 'paid' | 'overdue') => void;
+  onUpdateStatus: (ids: string[], status: 'pending' | 'paid' | 'overdue' | 'cancelled') => void;
   onUpdateNotes: (ids: string[], notes: string) => void;
 }
 
 type SortKey = 'property' | 'tenant' | 'phone' | 'dueDate' | 'totalAmount' | 'status' | 'notes';
 type SortDirection = 'asc' | 'desc';
+type SituationFilter = 'all' | 'awaiting' | 'paid' | 'overdue' | 'cancelled';
+
+const SITUATION_FILTER_OPTIONS: { value: SituationFilter; label: string }[] = [
+  { value: 'all', label: 'Todos' },
+  { value: 'awaiting', label: 'Aguardando Pagamento' },
+  { value: 'paid', label: 'Paga' },
+  { value: 'overdue', label: 'Vencida' },
+  { value: 'cancelled', label: 'Cancelada' },
+];
 
 const COLOR_OPTIONS = [
   { name: 'Limpar Cor', value: '', class: 'bg-white border-slate-300' },
@@ -44,6 +53,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
   const [activeStatusPicker, setActiveStatusPicker] = React.useState<string | null>(null);
   const [editingNotesId, setEditingNotesId] = React.useState<string | null>(null);
   const [editingNotesValue, setEditingNotesValue] = React.useState<string>('');
+  const [situationFilter, setSituationFilter] = React.useState<SituationFilter>('awaiting');
   const [sortConfig, setSortConfig] = React.useState<{ key: SortKey; direction: SortDirection }>({
     key: 'dueDate',
     direction: 'asc'
@@ -54,8 +64,13 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
     return d || new Date(0);
   };
 
+  const formatDisplayDate = (val: any): string => {
+    const d = parseDate(val);
+    return d ? format(d, 'dd/MM/yyyy') : '-';
+  };
+
   const isOverdue = (date: any, status?: string) => {
-    if (status === 'paid') return false;
+    if (status === 'paid' || status === 'cancelled') return false;
     if (status === 'overdue') return true;
     if (status !== 'pending') return false;
     const today = startOfDay(new Date());
@@ -71,13 +86,26 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
     return isBefore(dueDateObj, warningDate);
   };
 
+  const matchesSituationFilter = (record: BillingRecord, filter: SituationFilter) => {
+    const st = record.status || 'pending';
+    if (filter === 'all') return true;
+    if (filter === 'cancelled') return st === 'cancelled';
+    if (filter === 'paid') return st === 'paid';
+    if (filter === 'overdue') {
+      return st !== 'paid' && st !== 'cancelled' && (st === 'overdue' || isOverdue(record.dueDate, st));
+    }
+    // awaiting = Aguardando Pagamento
+    return st === 'pending' && !isOverdue(record.dueDate, st);
+  };
+
   const getStatusWeight = (record: BillingRecord) => {
     const st = record.status || 'pending';
-    if (st === 'overdue' || isOverdue(record.dueDate, st)) return 1; // Atrasado
+    if (st === 'cancelled') return 5;
+    if (st === 'overdue' || isOverdue(record.dueDate, st)) return 1; // Vencida
     if (isDueSoon(record.dueDate, st)) return 2; // Vence Logo
-    if (st === 'pending') return 3; // Pendente
-    if (st === 'paid') return 4; // Pago
-    return 5;
+    if (st === 'pending') return 3; // Aguardando Pagamento
+    if (st === 'paid') return 4; // Paga
+    return 6;
   };
 
   const getPropertyInfo = (billing: BillingRecord) => {
@@ -130,11 +158,13 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
         groups[key].paidAmount = (groups[key].paidAmount || 0) + (billing.paidAmount || 0);
         groups[key].ids.push(billing.id!);
         
-        // Status priority: overdue > pending > paid
+        // Status priority: overdue > pending > cancelled > paid
         if (billing.status === 'overdue') {
           groups[key].status = 'overdue';
-        } else if (billing.status === 'pending' && groups[key].status === 'paid') {
+        } else if (billing.status === 'pending' && groups[key].status !== 'overdue') {
           groups[key].status = 'pending';
+        } else if (billing.status === 'cancelled' && groups[key].status === 'paid') {
+          groups[key].status = 'cancelled';
         }
       } else {
         groups[key] = {
@@ -146,7 +176,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
       }
     });
 
-    const result = Object.values(groups);
+    const result = Object.values(groups).filter(b => matchesSituationFilter(b, situationFilter));
 
     // Apply sorting
     result.sort((a, b) => {
@@ -203,7 +233,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
     });
 
     return result;
-  }, [billings, sortConfig, properties]);
+  }, [billings, sortConfig, properties, situationFilter]);
 
   const handleSort = (key: SortKey) => {
     setSortConfig(prev => ({
@@ -222,7 +252,16 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-100 uppercase tracking-wider">
           <CheckCircle size={10} />
-          Pago
+          Paga
+        </span>
+      );
+    }
+
+    if (status === 'cancelled') {
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-bold border border-slate-200 uppercase tracking-wider">
+          <AlertCircle size={10} />
+          Cancelada
         </span>
       );
     }
@@ -234,7 +273,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-100 uppercase tracking-wider">
           <AlertCircle size={10} />
-          Atrasado
+          Vencida
         </span>
       );
     }
@@ -251,7 +290,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-100 uppercase tracking-wider">
         <Clock size={10} />
-        Pendente
+        Aguardando Pagamento
       </span>
     );
   };
@@ -286,16 +325,9 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
 
   const copyBillingText = (billing: BillingRecord) => {
     const prop = getPropertyInfo(billing);
-    let dueDate = '-';
-    try {
-      if (billing.dueDate?.toDate) dueDate = format(billing.dueDate.toDate(), 'dd/MM/yyyy');
-      else if (typeof billing.dueDate === 'string') dueDate = billing.dueDate;
-    } catch(e) {}
-
-    let readingDate: string | null = null;
-    try {
-      if (billing.readingDate?.toDate) readingDate = format(billing.readingDate.toDate(), 'dd/MM/yyyy');
-    } catch(e) {}
+    const dueDate = formatDisplayDate(billing.dueDate);
+    const readingParsed = parseDate(billing.readingDate);
+    const readingDate = readingParsed ? format(readingParsed, 'dd/MM/yyyy') : null;
 
     const total = (billing.totalAmount || (billing as any).amount || 0);
     const paid = (billing.paidAmount || 0);
@@ -346,18 +378,16 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
     if (billing.paymentHistory && billing.paymentHistory.length > 0) {
       message += `\n*Pagamentos/Baixas Realizadas:*\n`;
       billing.paymentHistory.forEach((ph, idx) => {
-        let dateFmt = ph.date || '-';
-        if (ph.date && ph.date.includes('-')) {
-          const parts = ph.date.split('-');
-          if (parts.length === 3) dateFmt = `${parts[2]}/${parts[1]}/${parts[0]}`;
-        }
+        const dateFmt = formatDisplayDate(ph.date);
         message += `• ${idx + 1}º Pagto: R$ ${ph.amount.toFixed(2)} em ${dateFmt}${ph.notes ? ` (${ph.notes})` : ''}\n`;
       });
       message += `\n*Total Pago:* R$ ${paidStr}\n`;
     }
     
     message += `\n`;
-    if (surplus && parseFloat(surplus) > 0) {
+    if (billing.status === 'cancelled') {
+      message += `*STATUS: CANCELADA*\n`;
+    } else if (surplus && parseFloat(surplus) > 0) {
       message += `*STATUS: QUITADO (SALDO POSITIVO / CRÉDITO: R$ ${surplus})*\n`;
     } else if (billing.status === 'paid') {
       message += `*STATUS: QUITADO*\n`;
@@ -375,11 +405,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
 
   const copyBillingTextSummary = (billing: BillingRecord) => {
     const prop = getPropertyInfo(billing);
-    let dueDate = '-';
-    try {
-      if (billing.dueDate?.toDate) dueDate = format(billing.dueDate.toDate(), 'dd/MM/yyyy');
-      else if (typeof billing.dueDate === 'string') dueDate = billing.dueDate;
-    } catch(e) {}
+    const dueDate = formatDisplayDate(billing.dueDate);
 
     const total = (billing.totalAmount || (billing as any).amount || 0);
     const paid = (billing.paidAmount || 0);
@@ -423,11 +449,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
 
   const generatePDF = (billing: BillingRecord) => {
     const prop = getPropertyInfo(billing);
-    let dueDate = '-';
-    try {
-      if (billing.dueDate?.toDate) dueDate = format(billing.dueDate.toDate(), 'dd/MM/yyyy');
-      else if (typeof billing.dueDate === 'string') dueDate = billing.dueDate;
-    } catch(e) {}
+    const dueDate = formatDisplayDate(billing.dueDate);
 
     const totalAmount = (billing.totalAmount || (billing as any).amount || 0);
     const total = totalAmount.toFixed(2);
@@ -443,10 +465,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
     doc.text(`Imóvel: ${prop.code}`, 20, 40);
     doc.text(`Inquilino: ${prop.tenant}`, 20, 48);
     if (billing.readingDate) {
-      let rDate = '-';
-      try {
-        if (billing.readingDate?.toDate) rDate = format(billing.readingDate.toDate(), 'dd/MM/yyyy');
-      } catch(e) {}
+      const rDate = formatDisplayDate(billing.readingDate);
       doc.text(`Data da Leitura: ${rDate}`, 20, 56);
       doc.text(`Vencimento: ${dueDate}`, 20, 64);
     } else {
@@ -492,12 +511,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
       doc.text('Histórico de Pagamentos Parciais / Baixas:', 20, finalY);
 
       const historyData = billing.paymentHistory.map(ph => {
-        let dateFmt = ph.date || '-';
-        if (ph.date && ph.date.includes('-')) {
-          const parts = ph.date.split('-');
-          if (parts.length === 3) dateFmt = `${parts[2]}/${parts[1]}/${parts[0]}`;
-        }
-        return [dateFmt, `R$ ${ph.amount.toFixed(2)}`, ph.notes || '-'];
+        return [formatDisplayDate(ph.date), `R$ ${ph.amount.toFixed(2)}`, ph.notes || '-'];
       });
 
       autoTable(doc, {
@@ -519,7 +533,11 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
 
     const paid = billing.paidAmount || 0;
     const surplus = paid > totalAmount ? paid - totalAmount : 0;
-    if (surplus > 0) {
+    if (billing.status === 'cancelled') {
+      doc.setFontSize(14);
+      doc.setTextColor(100, 116, 139);
+      doc.text('STATUS: CANCELADA', 190, finalY + 8, { align: 'right' });
+    } else if (surplus > 0) {
       doc.setFontSize(14);
       doc.setTextColor(22, 163, 74);
       doc.text('STATUS: QUITADO', 190, finalY + 8, { align: 'right' });
@@ -562,6 +580,29 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
 
   return (
     <div className="space-y-4">
+      <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm px-4 py-3 flex flex-wrap items-end gap-4">
+        <div className="min-w-[220px]">
+          <label className="block text-xs font-bold text-slate-600 mb-1.5">
+            Situação da fatura
+          </label>
+          <select
+            value={situationFilter}
+            onChange={(e) => {
+              setSituationFilter(e.target.value as SituationFilter);
+              setSelectedIds(new Set());
+            }}
+            className="w-full px-3 py-2.5 bg-white border border-emerald-500/80 rounded-xl text-sm font-medium text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500/30 cursor-pointer"
+          >
+            {SITUATION_FILTER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="text-xs text-slate-500 font-medium pb-2.5">
+          {groupedBillings.length} fatura(s) exibida(s)
+        </div>
+      </div>
+
       {selectedIds.size > 0 && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
@@ -598,6 +639,12 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
         </motion.div>
       )}
 
+      {groupedBillings.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-3xl border border-dashed border-slate-200">
+          <DollarSign className="mx-auto text-slate-300 mb-4" size={48} />
+          <p className="text-slate-500 font-medium">Nenhuma fatura nesta situação.</p>
+        </div>
+      ) : (
       <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm">
         <div className="relative overflow-x-auto">
           <table className="w-full border-collapse min-w-[950px]">
@@ -762,14 +809,15 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
                             className="absolute bottom-full mb-2 p-2 bg-white rounded-2xl shadow-2xl border border-slate-100 flex flex-col gap-1 z-[100] min-w-[120px]"
                           >
                             {[
-                              { id: 'pending', label: 'Pendente', icon: Clock, class: 'text-blue-600 bg-blue-50 hover:bg-blue-100' },
-                              { id: 'paid', label: 'Pago', icon: CheckCircle, class: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' },
-                              { id: 'overdue', label: 'Atrasado', icon: AlertCircle, class: 'text-rose-600 bg-rose-50 hover:bg-rose-100' },
+                              { id: 'pending', label: 'Aguardando Pagamento', icon: Clock, class: 'text-blue-600 bg-blue-50 hover:bg-blue-100' },
+                              { id: 'paid', label: 'Paga', icon: CheckCircle, class: 'text-emerald-600 bg-emerald-50 hover:bg-emerald-100' },
+                              { id: 'overdue', label: 'Vencida', icon: AlertCircle, class: 'text-rose-600 bg-rose-50 hover:bg-rose-100' },
+                              { id: 'cancelled', label: 'Cancelada', icon: AlertCircle, class: 'text-slate-600 bg-slate-50 hover:bg-slate-100' },
                             ].map((s) => (
                               <button
                                 key={s.id}
                                 onClick={() => {
-                                  onUpdateStatus(billing.ids || [billing.id!], s.id as any);
+                                  onUpdateStatus(billing.ids || [billing.id!], s.id as 'pending' | 'paid' | 'overdue' | 'cancelled');
                                   setActiveStatusPicker(null);
                                 }}
                                 className={`flex items-center gap-2 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-colors ${s.class} ${billing.status === s.id ? 'ring-2 ring-blue-500 ring-inset' : ''}`}
@@ -902,6 +950,7 @@ export default function BillingList({ billings, properties, onEdit, onDelete, on
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 }

@@ -18,6 +18,14 @@ export interface TenantDocument {
   size?: number;
 }
 
+/** Ocupante adicional além do titular do contrato. */
+export interface AdditionalOccupant {
+  id?: string;
+  name: string;
+  cpf: string;
+  phone: string;
+}
+
 export interface AdditionalTenantInfo {
   id: string;
   label: string;
@@ -40,14 +48,31 @@ export interface Property {
   tenantCpf?: string;
   tenantEmail?: string;
   tenantAddress?: string;
+  /** Demais pessoas que vão morar (nome, CPF, telefone). */
+  additionalOccupants?: AdditionalOccupant[];
   referencePhone?: string;
   referenceAddress?: string;
   documents?: TenantDocument[];
   additionalInfo?: AdditionalTenantInfo[];
+  /** Token do link público para o locatário preencher a ficha. */
+  contractIntakeToken?: string;
+  contractIntakeExpiresAt?: string;
+  contractIntakeSubmittedAt?: string;
   phone?: string; // Legacy field retained for backwards compatibility
   phones?: TenantPhone[]; // Multiple phone numbers with active for billing flag
   rentAmount?: number;
   leaseStartDate?: any;
+  /** Contrato temporada (Remix). Residencial 30 meses = modelo futuro. */
+  contractType?: 'temporada' | 'residencial';
+  /** Prazo da temporada em dias (30 | 60 | 90). */
+  leaseDurationDays?: 30 | 60 | 90;
+  /** Data de término calculada (yyyy-MM-dd ou Timestamp). */
+  leaseEndDate?: any;
+  /** Endereço completo do imóvel (objeto do contrato). */
+  propertyAddress?: string;
+  adminFee?: number;
+  cleaningFee?: number;
+  maxOccupants?: number;
   initialWaterReading?: number;
   initialElectricityReading?: number;
   securityDepositAmount?: number;
@@ -95,7 +120,7 @@ export interface BillingRecord {
   paymentHistory?: PaymentEntry[];
   readingDate?: any;
   dueDate: any;
-  status: 'pending' | 'paid' | 'overdue';
+  status: 'pending' | 'paid' | 'overdue' | 'cancelled';
   archived?: boolean;
   colorTag?: string; // Hex color or color name for row highlighting
   userRemovedBalanceItem?: boolean;

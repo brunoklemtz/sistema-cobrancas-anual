@@ -9,7 +9,8 @@ export type DocTable =
   | 'whatsapp_queue'
   | 'whatsapp_templates'
   | 'whatsapp_alerts'
-  | 'audit_logs';
+  | 'audit_logs'
+  | 'contract_intakes';
 
 export type DocRecord = Record<string, any> & { id: string };
 

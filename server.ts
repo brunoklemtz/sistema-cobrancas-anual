@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import express, { Request, Response } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
@@ -6,13 +7,14 @@ import {
   handleUazapiStatus,
   handleContingencyAlert,
 } from './shared/uazapi';
+import { handleIntakeGet, handleIntakePost } from './shared/contractIntake';
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.json({ limit: '20mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
   app.post('/api/uazapi/send', async (req: Request, res: Response) => {
     try {
@@ -49,6 +51,24 @@ async function startServer() {
 
   app.get('/api/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', time: new Date().toISOString() });
+  });
+
+  app.get('/api/contract-intake', async (_req: Request, res: Response) => {
+    try {
+      const result = await handleIntakeGet();
+      return res.status(result.status).json(result.json);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/contract-intake', async (req: Request, res: Response) => {
+    try {
+      const result = await handleIntakePost(undefined, req.body || {});
+      return res.status(result.status).json(result.json);
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
   });
 
   if (process.env.NODE_ENV !== 'production') {

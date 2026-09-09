@@ -9,11 +9,20 @@ import {
   DocTable
 } from '../lib/db';
 import { supabase } from '../supabase';
-import { Property, OperationType, TenantPhone } from '../types';
+import { Property, OperationType, TenantPhone, AdditionalOccupant } from '../types';
 import { handleFirestoreError, parseDate } from '../utils/firestore';
 import { logAudit } from '../utils/auditLogger';
 import { assertPropertyAvailableForContract } from '../utils/propertyAvailability';
-import { X, Home, User, Phone, Save, Droplets, Zap, Calendar, DollarSign, Mail, IdCard, CheckCircle, AlertCircle, Building2, Plus, Trash2, MessageSquare, PauseCircle, PlayCircle, ClipboardCheck, Sparkles, Utensils } from 'lucide-react';
+import {
+  LEASE_DURATION_OPTIONS,
+  LeaseDurationDays,
+  buildSeasonContract,
+  calcLeaseEndDate,
+  formatDateBr,
+  DEFAULT_SEASON_FEES,
+  hasTenantIdDocument,
+} from '../contracts/temporada';
+import { X, Home, User, Phone, Save, Droplets, Zap, Calendar, DollarSign, Mail, IdCard, CheckCircle, AlertCircle, Building2, Plus, Trash2, MessageSquare, PauseCircle, PlayCircle, ClipboardCheck, Sparkles, Utensils, FileText, Copy, Link2 } from 'lucide-react';
 import { format, isBefore } from 'date-fns';
 import CondoFormModal from './CondoFormModal';
 
@@ -63,6 +72,19 @@ export default function PropertyForm({ property, properties = [], onClose }: Pro
   };
 
   const [leaseStartDate, setLeaseStartDate] = useState(getInitialLeaseDate(property));
+  const [leaseDurationDays, setLeaseDurationDays] = useState<LeaseDurationDays>(
+    (property?.leaseDurationDays as LeaseDurationDays) || 90
+  );
+  const [propertyAddress, setPropertyAddress] = useState(property?.propertyAddress || '');
+  const [adminFee, setAdminFee] = useState(
+    property?.adminFee != null ? String(property.adminFee) : String(DEFAULT_SEASON_FEES.adminFee)
+  );
+  const [cleaningFee, setCleaningFee] = useState(
+    property?.cleaningFee != null ? String(property.cleaningFee) : String(DEFAULT_SEASON_FEES.cleaningFee)
+  );
+  const [maxOccupants, setMaxOccupants] = useState(
+    property?.maxOccupants != null ? String(property.maxOccupants) : String(DEFAULT_SEASON_FEES.maxOccupants)
+  );
   const [initialWaterReading, setInitialWaterReading] = useState(property?.initialWaterReading?.toString() || '');
   const [initialElectricityReading, setInitialElectricityReading] = useState(property?.initialElectricityReading?.toString() || '');
   const [securityDepositAmount, setSecurityDepositAmount] = useState(property?.securityDepositAmount?.toString() || '');
@@ -73,6 +95,20 @@ export default function PropertyForm({ property, properties = [], onClose }: Pro
   const [isClean, setIsClean] = useState(property?.isClean ?? true);
   const [hasUtensils, setHasUtensils] = useState(property?.hasUtensils ?? false);
   const [inspectionNotes, setInspectionNotes] = useState(property?.inspectionNotes || '');
+  const [contractCopyFeedback, setContractCopyFeedback] = useState<string | null>(null);
+  const [contractPreviewHtml, setContractPreviewHtml] = useState<string | null>(null);
+  const [intakeLinkFeedback, setIntakeLinkFeedback] = useState<string | null>(null);
+  const [additionalOccupants, setAdditionalOccupants] = useState<AdditionalOccupant[]>(
+    property?.additionalOccupants || []
+  );
+
+  const leaseEndDateComputed = (() => {
+    try {
+      return calcLeaseEndDate(leaseStartDate, leaseDurationDays);
+    } catch {
+      return null;
+    }
+  })();
 
   const [loading, setLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -199,6 +235,11 @@ export default function PropertyForm({ property, properties = [], onClose }: Pro
     setPhone(property?.phone || '');
     setRentAmount(property?.rentAmount?.toString() || '');
     setLeaseStartDate(getInitialLeaseDate(property));
+    setLeaseDurationDays((property?.leaseDurationDays as LeaseDurationDays) || 90);
+    setPropertyAddress(property?.propertyAddress || '');
+    setAdminFee(property?.adminFee != null ? String(property.adminFee) : String(DEFAULT_SEASON_FEES.adminFee));
+    setCleaningFee(property?.cleaningFee != null ? String(property.cleaningFee) : String(DEFAULT_SEASON_FEES.cleaningFee));
+    setMaxOccupants(property?.maxOccupants != null ? String(property.maxOccupants) : String(DEFAULT_SEASON_FEES.maxOccupants));
     setInitialWaterReading(property?.initialWaterReading?.toString() || '');
     setInitialElectricityReading(property?.initialElectricityReading?.toString() || '');
     setSecurityDepositAmount(property?.securityDepositAmount?.toString() || '');
@@ -206,6 +247,8 @@ export default function PropertyForm({ property, properties = [], onClose }: Pro
     setIsClean(property?.isClean ?? true);
     setHasUtensils(property?.hasUtensils ?? false);
     setInspectionNotes(property?.inspectionNotes || '');
+    setAdditionalOccupants(property?.additionalOccupants || []);
+    setContractPreviewHtml(null);
     setStatus(property?.status || 'active');
     setShowSuccess(false);
     setError(null);
@@ -308,6 +351,23 @@ export default function PropertyForm({ property, properties = [], onClose }: Pro
         cadencePaused: cadencePaused ?? false,
         rentAmount: parseInput(rentAmount),
         leaseStartDate: leaseTimestamp,
+        contractType: 'temporada' as const,
+        leaseDurationDays,
+        leaseEndDate: leaseEndDateComputed
+          ? Timestamp.fromDate(leaseEndDateComputed)
+          : null,
+        propertyAddress: (propertyAddress || '').trim(),
+        adminFee: parseInput(adminFee),
+        cleaningFee: parseInput(cleaningFee),
+        maxOccupants: Math.max(1, Math.round(parseInput(maxOccupants)) || 1),
+        additionalOccupants: (additionalOccupants || [])
+          .map((o) => ({
+            id: o.id || `occ_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            name: (o.name || '').trim(),
+            cpf: (o.cpf || '').trim(),
+            phone: (o.phone || '').trim(),
+          }))
+          .filter((o) => o.name && o.cpf),
         initialWaterReading: parseInput(initialWaterReading),
         initialElectricityReading: parseInput(initialElectricityReading),
         securityDepositAmount: parseInput(securityDepositAmount),
@@ -318,6 +378,14 @@ export default function PropertyForm({ property, properties = [], onClose }: Pro
         status: status || 'active',
         updatedAt: serverTimestamp(),
       };
+
+      // Preserva documentos e token de ficha já existentes
+      if (property?.documents) data.documents = property.documents;
+      if (property?.contractIntakeToken) {
+        data.contractIntakeToken = property.contractIntakeToken;
+        data.contractIntakeExpiresAt = property.contractIntakeExpiresAt;
+        data.contractIntakeSubmittedAt = property.contractIntakeSubmittedAt;
+      }
 
       const { data: authData } = await supabase.auth.getUser();
       const userEmail = authData.user?.email?.toLowerCase();
@@ -808,6 +876,258 @@ export default function PropertyForm({ property, properties = [], onClose }: Pro
                     />
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5 flex items-center gap-1">
+                    <Calendar size={13} className="text-indigo-500" /> Prazo temporada
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {LEASE_DURATION_OPTIONS.map((days) => (
+                      <button
+                        key={days}
+                        type="button"
+                        onClick={() => setLeaseDurationDays(days)}
+                        className={`py-2 rounded-xl text-xs font-extrabold border-2 transition-all cursor-pointer ${
+                          leaseDurationDays === days
+                            ? 'bg-indigo-50 border-indigo-500 text-indigo-800 shadow-2xs'
+                            : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'
+                        }`}
+                      >
+                        {days} dias
+                      </button>
+                    ))}
+                  </div>
+                  {leaseEndDateComputed && (
+                    <p className="mt-1.5 text-[11px] font-semibold text-slate-600">
+                      Término: <span className="font-extrabold text-indigo-700">{formatDateBr(leaseEndDateComputed)}</span>
+                      <span className="text-slate-400 font-medium"> (início + {leaseDurationDays} dias)</span>
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Endereço do imóvel (contrato)
+                  </label>
+                  <input
+                    type="text"
+                    value={propertyAddress}
+                    onChange={(e) => setPropertyAddress(e.target.value)}
+                    placeholder="Ex.: Rua Olinda Peixoto, 431, apto 301, Perequê, Porto Belo/SC"
+                    className="w-full px-3 py-2 border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all text-xs"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Taxa adm. (R$)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={adminFee}
+                      onChange={(e) => setAdminFee(e.target.value)}
+                      className="w-full px-2 py-2 border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Limpeza (R$)</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={cleaningFee}
+                      onChange={(e) => setCleaningFee(e.target.value)}
+                      className="w-full px-2 py-2 border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Ocupantes</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={maxOccupants}
+                      onChange={(e) => setMaxOccupants(e.target.value)}
+                      className="w-full px-2 py-2 border border-gray-200 bg-white rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-xs font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-gray-700">Demais ocupantes (ficha)</label>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAdditionalOccupants((prev) => [
+                          ...prev,
+                          { name: '', cpf: '', phone: '' },
+                        ])
+                      }
+                      className="text-[11px] font-bold text-indigo-600 flex items-center gap-1"
+                    >
+                      <Plus size={12} /> Adicionar
+                    </button>
+                  </div>
+                  {additionalOccupants.map((occ, idx) => (
+                    <div key={idx} className="grid grid-cols-7 gap-1.5 items-center">
+                      <input
+                        placeholder="Nome"
+                        value={occ.name}
+                        onChange={(e) => {
+                          const next = [...additionalOccupants];
+                          next[idx] = { ...next[idx], name: e.target.value };
+                          setAdditionalOccupants(next);
+                        }}
+                        className="col-span-3 px-2 py-1.5 border border-gray-200 rounded-lg text-[11px]"
+                      />
+                      <input
+                        placeholder="CPF"
+                        value={occ.cpf}
+                        onChange={(e) => {
+                          const next = [...additionalOccupants];
+                          next[idx] = { ...next[idx], cpf: e.target.value };
+                          setAdditionalOccupants(next);
+                        }}
+                        className="col-span-2 px-2 py-1.5 border border-gray-200 rounded-lg text-[11px]"
+                      />
+                      <input
+                        placeholder="Tel."
+                        value={occ.phone}
+                        onChange={(e) => {
+                          const next = [...additionalOccupants];
+                          next[idx] = { ...next[idx], phone: e.target.value };
+                          setAdditionalOccupants(next);
+                        }}
+                        className="col-span-1 px-2 py-1.5 border border-gray-200 rounded-lg text-[11px]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAdditionalOccupants((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        className="text-slate-400 hover:text-red-500"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const url = `${window.location.origin}/ficha`;
+                        await navigator.clipboard.writeText(url);
+                        setIntakeLinkFeedback(`Link fixo copiado: ${url}`);
+                        setTimeout(() => setIntakeLinkFeedback(null), 8000);
+                      } catch (err: any) {
+                        setIntakeLinkFeedback(err?.message || 'Falha ao copiar link');
+                      }
+                    }}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 bg-amber-500 hover:bg-amber-600 text-amber-950 rounded-xl text-xs font-extrabold transition-all cursor-pointer"
+                  >
+                    <Link2 size={14} />
+                    Copiar link fixo da ficha (/ficha)
+                  </button>
+                  {intakeLinkFeedback && (
+                    <p className="text-[11px] font-semibold text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5 break-all">
+                      {intakeLinkFeedback}
+                    </p>
+                  )}
+                  {!hasTenantIdDocument(property?.documents) && (
+                    <p className="text-[11px] font-semibold text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1.5">
+                      Falta a foto do documento do titular (pelo link /ficha ou em Inquilinos). Sem ela o contrato não é gerado.
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const parseMoney = (val: string) => {
+                      if (!val?.trim()) return 0;
+                      const sanitized = val.includes(',')
+                        ? val.replace(/\./g, '').replace(',', '.')
+                        : val;
+                      const n = parseFloat(sanitized);
+                      return isNaN(n) ? 0 : n;
+                    };
+                    try {
+                      if (!hasTenantIdDocument(property?.documents)) {
+                        setContractCopyFeedback(
+                          'Anexe a foto do documento do titular antes de gerar o contrato.'
+                        );
+                        return;
+                      }
+                      const primaryPhone =
+                        phones.find((p) => p.isActiveForBilling)?.number ||
+                        phones[0]?.number ||
+                        phone ||
+                        '';
+                      if (!ownerName.trim() || !tenantCpf.trim() || !primaryPhone.trim()) {
+                        setContractCopyFeedback('Preencha nome, CPF e telefone do inquilino.');
+                        return;
+                      }
+                      if (!propertyAddress.trim()) {
+                        setContractCopyFeedback('Informe o endereço do imóvel.');
+                        return;
+                      }
+                      const filled = buildSeasonContract({
+                        propertyCode: propertyCode || '—',
+                        condominium: condominium || undefined,
+                        propertyAddress: propertyAddress.trim(),
+                        tenantName: ownerName.trim(),
+                        tenantCpf: tenantCpf.trim(),
+                        tenantEmail: tenantEmail.trim() || undefined,
+                        tenantPhone: primaryPhone.trim(),
+                        tenantAddress: property?.tenantAddress || undefined,
+                        additionalOccupants: additionalOccupants.filter((o) => o.name.trim()),
+                        rentAmount: parseMoney(rentAmount),
+                        leaseStartDate,
+                        leaseDurationDays,
+                        maxOccupants: Math.max(1, parseInt(maxOccupants, 10) || 1),
+                        adminFee: parseMoney(adminFee) || DEFAULT_SEASON_FEES.adminFee,
+                        cleaningFee: parseMoney(cleaningFee) || DEFAULT_SEASON_FEES.cleaningFee,
+                        initialWaterReading: initialWaterReading
+                          ? parseMoney(initialWaterReading)
+                          : null,
+                        initialElectricityReading: initialElectricityReading
+                          ? parseMoney(initialElectricityReading)
+                          : null,
+                        highlightPlain: true,
+                      });
+                      setContractPreviewHtml(filled.htmlPreview);
+                      await navigator.clipboard.writeText(filled.text);
+                      setContractCopyFeedback(
+                        `Contrato ${leaseDurationDays} dias copiado (${filled.meta.leaseStartDate} → ${filled.meta.leaseEndDate}). Dados da ficha em destaque amarelo. Anexe a foto do documento ao enviar no Autentique/PDF.`
+                      );
+                      setTimeout(() => setContractCopyFeedback(null), 6000);
+                    } catch (err: any) {
+                      setContractCopyFeedback(err?.message || 'Não foi possível gerar o contrato.');
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-extrabold transition-all cursor-pointer"
+                >
+                  <FileText size={14} />
+                  <Copy size={14} />
+                  Gerar / copiar contrato ({leaseDurationDays} dias)
+                </button>
+                {contractCopyFeedback && (
+                  <p className="text-[11px] font-semibold text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-lg px-2 py-1.5">
+                    {contractCopyFeedback}
+                  </p>
+                )}
+                {contractPreviewHtml && (
+                  <div className="max-h-72 overflow-y-auto border-2 border-amber-400 rounded-xl bg-white p-2">
+                    <p className="text-[10px] font-extrabold text-amber-800 mb-1 uppercase tracking-wide">
+                      Preview — campos editáveis em amarelo
+                    </p>
+                    <div
+                      dangerouslySetInnerHTML={{ __html: contractPreviewHtml }}
+                    />
+                  </div>
+                )}
 
                 {property?.id && (
                   <div className="bg-blue-50/90 border border-blue-200 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">

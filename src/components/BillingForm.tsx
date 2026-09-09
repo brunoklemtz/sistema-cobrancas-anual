@@ -64,7 +64,7 @@ export default function BillingForm({ billing, properties, onClose, defaultPrope
   const [dueDate, setDueDate] = useState(
     billing?.dueDate ? format(parseDate(billing.dueDate) || new Date(), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')
   );
-  const [status, setStatus] = useState<'pending' | 'paid' | 'overdue'>(billing?.status || 'pending');
+  const [status, setStatus] = useState<'pending' | 'paid' | 'overdue' | 'cancelled'>(billing?.status || 'pending');
   const [paidAmount, setPaidAmount] = useState(billing?.paidAmount?.toString() || '');
   const [paymentHistory, setPaymentHistory] = useState<PaymentEntry[]>(billing?.paymentHistory || []);
   const [showPartialHistory, setShowPartialHistory] = useState(false);
@@ -123,7 +123,7 @@ export default function BillingForm({ billing, properties, onClose, defaultPrope
           initialStatus = 'overdue';
         }
       }
-      setStatus(initialStatus);
+      setStatus(initialStatus as 'pending' | 'paid' | 'overdue' | 'cancelled');
       setPaidAmount(billing.paidAmount?.toString() || '');
       setPaymentHistory(billing.paymentHistory || []);
       setIsReadingDateManual(true);
@@ -857,8 +857,10 @@ export default function BillingForm({ billing, properties, onClose, defaultPrope
         finalHistory = [];
       }
 
-      let calculatedStatus: 'paid' | 'pending' | 'overdue' = status;
-      if (finalPaidAmount >= totalAmount - 0.01 && totalAmount > 0) {
+      let calculatedStatus: 'paid' | 'pending' | 'overdue' | 'cancelled' = status;
+      if (status === 'cancelled') {
+        calculatedStatus = 'cancelled';
+      } else if (finalPaidAmount >= totalAmount - 0.01 && totalAmount > 0) {
         calculatedStatus = 'paid';
       } else {
         const today = startOfDay(new Date());

@@ -2,14 +2,14 @@
   "buildCommand": "npm run build:web",
   "outputDirectory": "dist",
   "framework": "vite",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/ficha", "destination": "/index.html" },
+    { "source": "/formulario", "destination": "/index.html" }
+  ],
   "redirects": [
     {
       "source": "/",
-      "destination": "https://site-klemtz.vercel.app/admin/cobrancas",
-      "permanent": false
-    },
-    {
-      "source": "/:path*",
       "destination": "https://site-klemtz.vercel.app/admin/cobrancas",
       "permanent": false
     }
