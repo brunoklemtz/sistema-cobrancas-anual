@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "Varredura Origem WhatsApp",
+  "description": "Classifica origem de leads no WhatsApp Web para estatísticas de Meta, Status e Marketplace.",
+  "version": "0.4.0",
+  "action": {
+    "default_title": "Varredura Origem",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png",
+      "48": "assets/icon48.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "dist/sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "downloads",
+    "scripting",
+    "activeTab",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://web.whatsapp.com/*"
+  ]
+}

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Varredura de Origem</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body class="marketing">
+    <div class="wrap">
+      <div>
+        <h1 id="titulo">Varredura de origem</h1>
+        <div id="subtitulo" class="sub">Somente leitura · início da conversa · Meta / Status / Marketplace</div>
+      </div>
+      <label>Fila marketing JSON
+        <input id="file" class="file" type="file" accept="application/json,.json" />
+      </label>
+      <div id="json-info" class="hint">Nenhum arquivo importado</div>
+      <label>Lote (DMs por rodada)<input id="lote" type="number" min="1" max="80" value="20" /></label>
+      <label>Números extras (um por linha)<textarea id="extras" placeholder="+55 47 9908-8553"></textarea></label>
+      <div class="btns">
+        <button id="btn-smoke" type="button">Fazer smoke test</button>
+        <button id="btn-start" class="primary" type="button">Iniciar varredura</button>
+        <button id="btn-stop" class="danger" type="button" disabled>Parar</button>
+        <button id="btn-side" class="link" type="button">Abrir painel lateral</button>
+      </div>
+      <div id="prog" class="progress">0 / 0 conversas</div>
+      <div class="stats">
+        <div class="stat"><b id="n-msg">0</b><span id="lbl-msg">classificados</span></div>
+        <div class="stat"><b id="n-foto">0</b><span id="lbl-foto">meta</span></div>
+        <div class="stat"><b id="n-sem">0</b><span>sem conversa</span></div>
+        <div class="stat"><b id="n-err">0</b><span>erros</span></div>
+        <div class="stat"><b id="n-rev">0</b><span id="lbl-rev">pendentes revisão</span></div>
+      </div>
+      <div id="status" class="status"></div>
+      <div id="logs" class="logs"></div>
+      <div class="btns">
+        <button id="btn-json" type="button">Exportar JSON</button>
+        <button id="btn-csv" type="button">Exportar CSV</button>
+      </div>
+    </div>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "varredura-origem-whatsapp",
+  "private": true,
+  "version": "0.4.0",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node build.mjs --test"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "esbuild": "^0.25.9"
+  }
+}
