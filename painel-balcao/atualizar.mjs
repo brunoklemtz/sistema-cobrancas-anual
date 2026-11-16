@@ -16,14 +16,7 @@ import {
 } from "./base.mjs";
 import { baixarExportacao, conectarChrome, lerEmailsReserva } from "./chrome.mjs";
 import { lerDashboardDia } from "./dashboard.mjs";
-import {
-  buscarTelefoneAirbnb,
-  ehAirbnb,
-  lerFaltamTel,
-  limparFaltaTel,
-  marcarFaltaTel,
-  telOk,
-} from "./airbnb-telefone.mjs";
+import { telOk } from "./airbnb-telefone.mjs";
 import { gravarTelefoneArtaxChrome } from "./artax-telefone.mjs";
 import { assuntoDeReservaNova, reservaDoEmail } from "./email.mjs";
 import { linhasDaPlanilha } from "./planilha.mjs";
@@ -147,76 +140,6 @@ async function sincronizarTelArtax(chrome, reserva) {
   }
 }
 
-/** Airbnb sem tel: scrape Gerencie a reserva → forçar boas. */
-async function completarTelAirbnb(chrome, reserva, textoEmail) {
-  if (!ehAirbnb(reserva.procedencia) || telReservaOk(reserva)) {
-    return { reserva, scrape: null };
-  }
-  console.log("Airbnb sem tel " + reserva.id + ": buscando em Gerencie a reserva…");
-  let scrape;
-  try {
-    scrape = await buscarTelefoneAirbnb(chrome, { bookingId: reserva.id });
-  } catch (e) {
-    scrape = { ok: false, motivo: e instanceof Error ? e.message : String(e) };
-  }
-  if (!scrape?.ok || !telOk(scrape.telefone)) {
-    console.log("airbnb_tel_falhou " + reserva.id + " · " + (scrape?.motivo || "sem_tel"));
-    marcarFaltaTel(reserva.id);
-    const base = lerBase();
-    const i = base.reservas.findIndex((r) => String(r.id) === String(reserva.id));
-    if (i >= 0) {
-      base.reservas[i] = {
-        ...base.reservas[i],
-        waStatus: "sem_telefone",
-        telefoneOrigem: base.reservas[i].telefoneOrigem || "",
-      };
-      gravarBase(base);
-    }
-    return { reserva, scrape };
-  }
-  console.log("airbnb_tel_ok " + reserva.id + " → …" + String(scrape.telefone).slice(-4));
-  limparFaltaTel(reserva.id);
-  const atualizada = {
-    ...reserva,
-    telefone: scrape.telefone,
-    telefoneOrigem: "airbnb_chrome",
-    waStatus: "",
-  };
-  const base = lerBase();
-  const i = base.reservas.findIndex((r) => String(r.id) === String(reserva.id));
-  if (i >= 0) {
-    base.reservas[i] = {
-      ...base.reservas[i],
-      telefone: scrape.telefone,
-      telefoneOrigem: "airbnb_chrome",
-      waStatus: "",
-    };
-    gravarBase(base);
-  }
-  await sincronizarTelArtax(chrome, atualizada);
-  try {
-    const env = await dispararReservaNovaSite(atualizada, textoEmail, { forcar: true });
-    console.log(
-      "boas_ok " +
-        reserva.id +
-        ": " +
-        (env.boas?.ok ? "sim" : "nao") +
-        (env.boas?.info ? " · " + env.boas.info : ""),
-    );
-    if (env.boas && env.boas.ok === false) {
-      const base2 = lerBase();
-      const j = base2.reservas.findIndex((r) => String(r.id) === String(reserva.id));
-      if (j >= 0) {
-        base2.reservas[j] = { ...base2.reservas[j], waStatus: "falhou" };
-        gravarBase(base2);
-      }
-    }
-  } catch (e) {
-    console.error("forcar boas " + reserva.id + ": " + (e instanceof Error ? e.message : String(e)));
-  }
-  return { reserva: atualizada, scrape };
-}
-
 async function gravarPlanilha(buffer) {
   const { linhas, cabecalhos } = linhasDaPlanilha(buffer);
   if (!linhas.length) {
@@ -261,8 +184,16 @@ async function atualizarDashboard(chrome) {
   }
   const n = aplicarDashboard(base, { ...painel, dia: hojeSp() });
   base.meta.aviso = "";
+  const nCal = painel.calendario?.length || 0;
   const detalhe =
-    nHosp + " hospedados / " + nCheg + " chegadas / " + nSaid + " saídas · n_linhas=" + nLinhas;
+    nHosp +
+    " hospedados / " +
+    nCheg +
+    " chegadas / " +
+    nSaid +
+    " saídas · n_linhas=" +
+    nLinhas +
+    (nCal ? " · calendário " + nCal : "");
   marcarFonte(base, "dashboard", { ok: true, detalhe });
   gravarBase(base);
   console.log("Dashboard: " + detalhe + " (" + n + " reservas atualizadas).");
@@ -316,34 +247,29 @@ async function checarEmails(chrome) {
   const resultados = [];
   for (const item of disparos) {
     try {
-      let reserva = item.reserva;
+      const reserva = item.reserva;
       const env = await dispararReservaNovaSite(reserva, item.texto);
-      const boasFalhouTel =
-        env.boas &&
-        (env.boas.info === "telefone_invalido" || env.telefoneValido === false || !telReservaOk(reserva));
-      if (ehAirbnb(reserva.procedencia) && (!telReservaOk(reserva) || boasFalhouTel)) {
-        const extra = await completarTelAirbnb(chrome, reserva, item.texto);
-        reserva = extra.reserva;
-        resultados.push({
-          id: reserva.id,
-          ...env,
-          airbnb: extra.scrape,
-          telefonePreenchido: telReservaOk(reserva),
-        });
+      // Telefone automático só e-mail / planilha / API — sem scrape Chrome Airbnb.
+      if (!telReservaOk(reserva) || env.boas?.info === "telefone_invalido" || env.telefoneValido === false) {
+        const baseTel = lerBase();
+        const it = baseTel.reservas.findIndex((r) => String(r.id) === String(reserva.id));
+        if (it >= 0) {
+          baseTel.reservas[it] = { ...baseTel.reservas[it], waStatus: "sem_telefone" };
+          gravarBase(baseTel);
+        }
+        console.log("Reserva nova " + reserva.id + ": sem telefone (aguardando e-mail/planilha/API)");
       } else {
-        if (telReservaOk(reserva)) {
-          await sincronizarTelArtax(chrome, reserva);
-        }
-        if (env.boas?.ok === false && /whatsapp|n[aã]o est[aá]/i.test(String(env.boas.info || ""))) {
-          const baseWa = lerBase();
-          const iw = baseWa.reservas.findIndex((r) => String(r.id) === String(reserva.id));
-          if (iw >= 0) {
-            baseWa.reservas[iw] = { ...baseWa.reservas[iw], waStatus: "falhou" };
-            gravarBase(baseWa);
-          }
-        }
-        resultados.push({ id: reserva.id, ...env });
+        await sincronizarTelArtax(chrome, reserva);
       }
+      if (env.boas?.ok === false && /whatsapp|n[aã]o est[aá]/i.test(String(env.boas.info || ""))) {
+        const baseWa = lerBase();
+        const iw = baseWa.reservas.findIndex((r) => String(r.id) === String(reserva.id));
+        if (iw >= 0) {
+          baseWa.reservas[iw] = { ...baseWa.reservas[iw], waStatus: "falhou" };
+          gravarBase(baseWa);
+        }
+      }
+      resultados.push({ id: reserva.id, ...env, telefonePreenchido: telReservaOk(reserva) });
       console.log(
         "Reserva nova " +
           reserva.id +
@@ -375,36 +301,6 @@ async function checarEmails(chrome) {
     gravarBase(base2);
   }
   return { novo, disparos: resultados };
-}
-
-/** Revarre IDs em faltam-tel.json (Airbnb) e publica tel na SoT via reserva-nova forçar. */
-async function reprocessarFaltamTel(chrome) {
-  const ids = lerFaltamTel().slice(0, 12);
-  if (!ids.length) return { n: 0, ok: 0 };
-  const base = lerBase();
-  let ok = 0;
-  for (const id of ids) {
-    const reserva = (base.reservas || []).find((r) => String(r.id) === String(id));
-    if (!reserva) {
-      limparFaltaTel(id);
-      continue;
-    }
-    if (telReservaOk(reserva)) {
-      limparFaltaTel(id);
-      try {
-        await dispararReservaNovaSite(reserva, "", { forcar: true });
-        ok++;
-      } catch {
-        /* ignore */
-      }
-      continue;
-    }
-    if (!ehAirbnb(reserva.procedencia)) continue;
-    const extra = await completarTelAirbnb(chrome, reserva, "");
-    if (telReservaOk(extra.reserva)) ok++;
-  }
-  console.log("faltam-tel reprocess: " + ok + "/" + ids.length);
-  return { n: ids.length, ok };
 }
 
 async function principal() {
@@ -442,13 +338,11 @@ async function principal() {
       const chrome = await conectarChrome();
       try {
         const r = await checarEmails(chrome);
-        const faltam = await reprocessarFaltamTel(chrome);
-        const detalheFaltam = faltam.n ? ` · faltam-tel ${faltam.ok}/${faltam.n}` : "";
         gravarStatus({
           estado: "pronto",
           detalhe: r.novo
-            ? "E-mail: reserva nova · " + (r.disparos?.length || 0) + " disparo(s)" + detalheFaltam
-            : "Sem e-mail novo de reserva." + detalheFaltam,
+            ? "E-mail: reserva nova · " + (r.disparos?.length || 0) + " disparo(s)"
+            : "Sem e-mail novo de reserva.",
         });
         console.log(r.novo ? "Reserva nova processada." : "Sem e-mail novo de reserva.");
         terminouOk = true;
