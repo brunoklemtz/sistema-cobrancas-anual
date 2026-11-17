@@ -18,6 +18,7 @@ import TenantTransferModal from './components/TenantTransferModal';
 import CondoRentReportModal from './components/CondoRentReportModal';
 import CondoList from './components/CondoList';
 import TenantList from './components/TenantList';
+import ReservationList from './components/ReservationList';
 import BackupRestoreModal from './components/BackupRestoreModal';
 import WhatsAppSettingsModal from './components/WhatsAppSettingsModal';
 import WhatsAppNotificationModal from './components/WhatsAppNotificationModal';
@@ -39,7 +40,8 @@ import {
   Building2,
   Users,
   Database,
-  MessageSquare
+  MessageSquare,
+  CalendarRange
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, addMonths, startOfMonth, setDate, isBefore, startOfDay, addDays } from 'date-fns';
@@ -48,7 +50,7 @@ function asDate(val: any): Date {
   return parseDate(val) || new Date(0);
 }
 
-type Tab = 'properties' | 'billings' | 'tenants';
+type Tab = 'properties' | 'billings' | 'tenants' | 'reservations';
 
 function AppContent() {
   const [user, setUser] = useState<User | null>(null);
@@ -815,6 +817,7 @@ function AppContent() {
                 { id: 'properties', label: 'Imóveis', icon: Home },
                 { id: 'billings', label: 'Cobranças', icon: DollarSign },
                 { id: 'tenants', label: 'Inquilinos', icon: Users },
+                { id: 'reservations', label: 'Reservas', icon: CalendarRange },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -837,7 +840,7 @@ function AppContent() {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={15} />
               <input
                 type="text"
-                placeholder="Busca por imóvel ou inquilino..."
+                placeholder={activeTab === 'reservations' ? 'Busca por hóspede ou telefone...' : 'Busca por imóvel ou inquilino...'}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-blue-500/5 focus:bg-white focus:border-blue-500 outline-none w-32 md:w-60 lg:w-80 transition-all font-semibold text-xs md:text-sm placeholder:text-slate-400"
@@ -880,24 +883,26 @@ function AppContent() {
                     <span className="hidden lg:inline">Troca Rápida</span>
                   </button>
                 )}
-                <button
-                  onClick={() => {
-                    if (activeTab === 'properties') {
-                      setEditingProperty(null);
-                      setIsPropertyModalOpen(true);
-                    } else {
-                      setEditingBilling(null);
-                      setDefaultPropertyIdForBilling(null);
-                      setIsBillingModalOpen(true);
-                    }
-                  }}
-                  className="bg-blue-600 text-white p-2 lg:px-4 lg:py-2 rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-sm hover:shadow-md hover:shadow-blue-200 tracking-tight cursor-pointer text-xs"
-                >
-                  <Plus size={16} />
-                  <span className="hidden lg:inline">
-                    {activeTab === 'properties' ? 'Novo Imóvel' : 'Nova Cobrança'}
-                  </span>
-                </button>
+                {(activeTab === 'properties' || activeTab === 'billings') && (
+                  <button
+                    onClick={() => {
+                      if (activeTab === 'properties') {
+                        setEditingProperty(null);
+                        setIsPropertyModalOpen(true);
+                      } else {
+                        setEditingBilling(null);
+                        setDefaultPropertyIdForBilling(null);
+                        setIsBillingModalOpen(true);
+                      }
+                    }}
+                    className="bg-blue-600 text-white p-2 lg:px-4 lg:py-2 rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-sm hover:shadow-md hover:shadow-blue-200 tracking-tight cursor-pointer text-xs"
+                  >
+                    <Plus size={16} />
+                    <span className="hidden lg:inline">
+                      {activeTab === 'properties' ? 'Novo Imóvel' : 'Nova Cobrança'}
+                    </span>
+                  </button>
+                )}
               </div>
             )}
 
@@ -1194,6 +1199,9 @@ function AppContent() {
                     }}
                     onUpdateProperty={handleUpdateProperty}
                   />
+                )}
+                {activeTab === 'reservations' && (
+                  <ReservationList searchTerm={searchTerm} />
                 )}
               </motion.div>
             </AnimatePresence>
